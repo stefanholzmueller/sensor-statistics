@@ -70,9 +70,13 @@ object SensorStatistics extends IOApp {
         )))
 
   def printStatistics(fileCount: Long, accumulator: Accumulator): String =
-    val numProcessed = accumulator.values.map(_.data.map(_.count).getOrElse(0)).sum
+    val numSuccessful = accumulator.values.map(_.data.map(_.count).getOrElse(0)).sum
     val numFailed = accumulator.values.map(_.failed).sum
+    val numProcessed = numSuccessful + numFailed
     val sortedSensorData = sortSensorData(accumulator)
+    val sensorDataString = sortedSensorData.map(sensorData =>
+      s"${sensorData.id},${sensorData.stats.map(stats => s"${stats.min},${stats.avg.toLong},${stats.max}").getOrElse("NaN,NaN,NaN")}"
+    ).mkString("\n")
     s"""Num of processed files: $fileCount
        |Num of processed measurements: $numProcessed
        |Num of failed measurements: $numFailed
@@ -80,9 +84,10 @@ object SensorStatistics extends IOApp {
        |Sensors with highest avg humidity:
        |
        |sensor-id,min,avg,max
-       |$sortedSensorData""".stripMargin
+       |$sensorDataString
+       |""".stripMargin
 
-  def sortSensorData(accumulator: Accumulator): String =
+  def sortSensorData(accumulator: Accumulator): Seq[SensorData] =
     val sensorDataList = accumulator.toList.map((id, stats) => SensorData(
       id = id,
       stats = stats.data.map(data => Statistics(
@@ -91,11 +96,7 @@ object SensorStatistics extends IOApp {
         max = data.max
       ))
     ))
-    val sortedSensorData: Seq[SensorData] = sensorDataList.sortBy(_.stats.map(_.avg))(Ordering[Option[Double]].reverse)
-    val stringSensorData = sortedSensorData.map(sensorData =>
-      s"${sensorData.id},${sensorData.stats.map(stats => s"${stats.min},${stats.avg.toLong},${stats.max}").getOrElse("NaN,NaN,NaN")}"
-    )
-    stringSensorData.mkString("\n")
+    sensorDataList.sortBy(_.stats.map(_.avg))(Ordering[Option[Double]].reverse)
 
 }
 
