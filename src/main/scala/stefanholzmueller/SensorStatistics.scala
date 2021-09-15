@@ -1,7 +1,7 @@
 package stefanholzmueller
 
 
-import cats.effect._
+import cats.effect.*
 import fs2.{Stream, text}
 import fs2.io.file.{Files, Path}
 
@@ -11,7 +11,11 @@ object SensorStatistics extends IOApp {
   override def run(args: List[String]): IO[ExitCode] =
     for
       directoryPath <- extractDirectoryPath(args)
-      _ <- dummy(directoryPath).compile.drain
+      files = Files[IO].walk(directoryPath).filter(_.extName == ".csv")
+      fileCount <- files.compile.count
+      measurements = files.flatMap(readSensorMeasurements)
+      accumulator = measurements.fold[Accumulator](Map.empty)(accumulateStatistics)
+      _ <- accumulator.map(printStatistics(fileCount, _)).through(fs2.io.stdoutLines()).compile.drain
     yield ExitCode.Success
 
   def extractDirectoryPath(args: List[String]): IO[Path] =
@@ -22,12 +26,92 @@ object SensorStatistics extends IOApp {
       _ <- IO.raiseUnless(directoryExists)(new IllegalArgumentException("Error: given directory does not exist or is not readable"))
     yield directoryPath
 
-  def dummy(path: Path): Stream[IO, Unit] =
-    Files[IO].readAll(Path("test-files/leader-1.csv"))
+  def readSensorMeasurements(filePath: Path): Stream[IO, SensorMeasurement] =
+    Files[IO].readAll(filePath)
       .through(text.utf8.decode)
       .through(text.lines)
-      .drop(1)
-      .intersperse("\n")
-      .through(fs2.io.stdoutLines())
+      .filter(_.nonEmpty)
+      .drop(1) // skip the header line
+      .map(parseSensorMeasurement)
+
+  def parseSensorMeasurement(row: String): SensorMeasurement =
+    val parts = row.split(',')
+    val id = SensorId(parts(0))
+    val humidity = parts(1).toByteOption
+    SensorMeasurement(id, humidity)
+
+  def accumulateStatistics(acc: Accumulator, measurement: SensorMeasurement): Accumulator =
+    acc.updatedWith(measurement.id) {
+      case None =>
+        Some(initialData(measurement.humidity))
+      case Some(acc) =>
+        Some(accumulateData(measurement.humidity, acc))
+    }
+
+  private def initialData(humidity: Option[Byte]): AccumulatedSensorData =
+    humidity.fold(
+      AccumulatedSensorData(failed = 1, data = None)
+    )(
+      humidity => AccumulatedSensorData(failed = 0, data = Some(AccumulatedStatistics(1, humidity, humidity, humidity)))
+    )
+
+  private def accumulateData(humidity: Option[Byte], acc: AccumulatedSensorData): AccumulatedSensorData =
+    (humidity, acc) match
+      case (None, _) =>
+        acc.copy(failed = acc.failed + 1)
+      case (Some(h), AccumulatedSensorData(_, None)) =>
+        acc.copy(data = Some(AccumulatedStatistics(1, h, h, h)))
+      case (Some(h), AccumulatedSensorData(_, Some(data))) =>
+        acc.copy(data = Some(AccumulatedStatistics(
+          count = data.count + 1,
+          sum = data.sum + h,
+          min = if h > data.min then data.min else h,
+          max = if h < data.max then data.max else h
+        )))
+
+  def printStatistics(fileCount: Long, accumulator: Accumulator): String =
+    val numProcessed = accumulator.values.map(_.data.map(_.count).getOrElse(0)).sum
+    val numFailed = accumulator.values.map(_.failed).sum
+    val sortedSensorData = sortSensorData(accumulator)
+    s"""Num of processed files: $fileCount
+       |Num of processed measurements: $numProcessed
+       |Num of failed measurements: $numFailed
+       |
+       |Sensors with highest avg humidity:
+       |
+       |sensor-id,min,avg,max
+       |$sortedSensorData""".stripMargin
+
+  def sortSensorData(accumulator: Accumulator): String =
+    val sensorDataList = accumulator.toList.map((id, stats) => SensorData(
+      id = id,
+      stats = stats.data.map(data => Statistics(
+        min = data.min,
+        avg = data.sum.toDouble / data.count,
+        max = data.max
+      ))
+    ))
+    val sortedSensorData: Seq[SensorData] = sensorDataList.sortBy(_.stats.map(_.avg))(Ordering[Option[Double]].reverse)
+    val stringSensorData = sortedSensorData.map(sensorData =>
+      s"${sensorData.id},${sensorData.stats.map(stats => s"${stats.min},${stats.avg.toLong},${stats.max}").getOrElse("NaN,NaN,NaN")}"
+    )
+    stringSensorData.mkString("\n")
 
 }
+
+
+opaque type SensorId = String
+object SensorId:
+  def apply(str: String): SensorId = str
+
+case class SensorMeasurement(id: SensorId, humidity: Option[Byte])
+
+case class AccumulatedStatistics(count: Int, sum: Long, min: Byte, max: Byte)
+
+case class AccumulatedSensorData(failed: Long, data: Option[AccumulatedStatistics])
+
+type Accumulator = Map[SensorId, AccumulatedSensorData]
+
+case class Statistics(min: Byte, avg: Double, max: Byte)
+
+case class SensorData(id: SensorId, stats: Option[Statistics])
