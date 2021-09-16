@@ -1,5 +1,6 @@
 name := "sensor-statistics"
-version := "0.1"
+version := "1.0"
+organization := "stefanholzmueller"
 
 scalaVersion := "3.0.1"
 scalacOptions := Seq("-unchecked", "-deprecation")
