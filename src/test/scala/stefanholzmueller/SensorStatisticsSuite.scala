@@ -10,7 +10,7 @@ class SensorStatisticsSuite extends munit.FunSuite {
   private val s2: SensorId = SensorId("s2")
   private val s3: SensorId = SensorId("s3")
 
-  test("integration test".ignore) {
+  test("integration test") {
     val measurements: Stream[Id, SensorMeasurement] = Stream(
       SensorMeasurement(s1, Some(10)),
       SensorMeasurement(s2, Some(88)),
@@ -25,7 +25,7 @@ class SensorStatisticsSuite extends munit.FunSuite {
     val sensorDataString = sensorDataStream.compile.string
 
     assertEquals(
-      sensorDataString,
+      sensorDataString.replaceAll("\r\n", "\n"),
       """Num of processed files: 2
         |Num of processed measurements: 7
         |Num of failed measurements: 2
@@ -36,7 +36,7 @@ class SensorStatisticsSuite extends munit.FunSuite {
         |s2,78,82,88
         |s1,10,54,98
         |s3,NaN,NaN,NaN
-        |""".stripMargin
+        |""".stripMargin.replaceAll("\r\n", "\n")
     )
   }
 

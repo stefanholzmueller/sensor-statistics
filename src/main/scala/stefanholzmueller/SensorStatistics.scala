@@ -5,6 +5,9 @@ import cats.effect.*
 import fs2.{Stream, text}
 import fs2.io.file.{Files, Path}
 
+import java.text.{DecimalFormat, DecimalFormatSymbols}
+import java.util.Locale
+
 
 object SensorStatistics extends IOApp {
 
@@ -37,7 +40,7 @@ object SensorStatistics extends IOApp {
   def parseSensorMeasurement(row: String): SensorMeasurement =
     val parts = row.split(',')
     val id = SensorId(parts(0))
-    val humidity = parts(1).toByteOption
+    val humidity = parts(1).toByteOption.filter(h => h >= 0 && h <= 100)
     SensorMeasurement(id, humidity)
 
   def accumulateStatistics(acc: Accumulator, measurement: SensorMeasurement): Accumulator =
@@ -75,7 +78,10 @@ object SensorStatistics extends IOApp {
     val numProcessed = numSuccessful + numFailed
     val sortedSensorData = sortSensorData(accumulator)
     val sensorDataString = sortedSensorData.map(sensorData =>
-      s"${sensorData.id},${sensorData.stats.map(stats => s"${stats.min},${stats.avg.toLong},${stats.max}").getOrElse("NaN,NaN,NaN")}"
+      sensorData.id.toString + "," + sensorData.stats.fold("NaN,NaN,NaN") { stats =>
+        val avg = new DecimalFormat("0.##", decimalLocale).format(stats.avg)
+        s"${stats.min},$avg,${stats.max}"
+      }
     ).mkString("\n")
     s"""Num of processed files: $fileCount
        |Num of processed measurements: $numProcessed
@@ -97,6 +103,8 @@ object SensorStatistics extends IOApp {
       ))
     ))
     sensorDataList.sortBy(_.stats.map(_.avg))(Ordering[Option[Double]].reverse)
+
+  private val decimalLocale = new DecimalFormatSymbols(Locale.US)
 
 }
 

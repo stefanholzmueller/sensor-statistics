@@ -15,4 +15,12 @@ class SensorMeasurementSuite extends munit.FunSuite {
     assertEquals(SensorStatistics.parseSensorMeasurement("s3,abc"), SensorMeasurement(SensorId("s3"), None))
   }
 
+  test("ignore negative measurement") {
+    assertEquals(SensorStatistics.parseSensorMeasurement("s3,-1"), SensorMeasurement(SensorId("s3"), None))
+  }
+
+  test("ignore measurement above 100") {
+    assertEquals(SensorStatistics.parseSensorMeasurement("s3,120"), SensorMeasurement(SensorId("s3"), None))
+  }
+
 }

@@ -8,7 +8,7 @@ class PrintStatisticsSuite extends munit.FunSuite {
 
   private def normalizeLineBreaks(str: String): String = str.replaceAll("\r\n", "\n")
 
-  test("example".ignore) { // munit bug? "values are not equal even if they have the same `toString()`"
+  test("example") {
     assertEquals(
       normalizeLineBreaks(
         SensorStatistics.printStatistics(2, Map(
@@ -27,6 +27,30 @@ class PrintStatisticsSuite extends munit.FunSuite {
           |s2,78,82,88
           |s1,10,54,98
           |s3,NaN,NaN,NaN
+          |""".stripMargin
+      )
+    )
+  }
+
+  test("rounding avg values") {
+    assertEquals(
+      normalizeLineBreaks(
+        SensorStatistics.printStatistics(1, Map(
+          s1 -> AccumulatedSensorData(0, Some(AccumulatedStatistics(2, 1 + 2, 1, 2))),
+          s2 -> AccumulatedSensorData(0, Some(AccumulatedStatistics(3, 0 + 0 + 1, 0, 1))),
+          s3 -> AccumulatedSensorData(0, Some(AccumulatedStatistics(1, 1, 1, 1)))
+        ))),
+      normalizeLineBreaks(
+        """Num of processed files: 1
+          |Num of processed measurements: 6
+          |Num of failed measurements: 0
+          |
+          |Sensors with highest avg humidity:
+          |
+          |sensor-id,min,avg,max
+          |s1,1,1.5,2
+          |s3,1,1,1
+          |s2,0,0.33,1
           |""".stripMargin
       )
     )
