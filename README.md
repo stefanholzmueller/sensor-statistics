@@ -17,7 +17,7 @@ The project is built with [SBT](https://www.scala-sbt.org).
 #### Run via SBT
 
 ```
-sbt run path/to/directory
+sbt "run path/to/directory"
 ```
 
 #### Build a JAR file
